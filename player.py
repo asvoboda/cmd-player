@@ -128,7 +128,7 @@ def poll_wait(prompt, mci, queue):
                             print "\nPlaying ... %s\n" % f
                             playMP3(f, mci)
                             sys.stdout.write(prompt)
-                
+            time.sleep(0.05)    
         except ValueError, e:
             e        
             
