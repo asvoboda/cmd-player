@@ -1,6 +1,5 @@
 from ctypes import windll, c_buffer
 import os
-import threading
 import msvcrt
 import time
 import sys
@@ -43,48 +42,6 @@ class MCI:
         #if err != 0:
             #print 'Error', str(err), 'on', txt, ':', buf
         return err, buf        
-        
-class Poller(threading.Thread):
-    """Thread class with a stop() method. The thread itself has to check
-    regularly for the stopped() condition."""
-
-    def __init__(self, queue, mci):
-        super(Poller, self).__init__()
-        self._stop = threading.Event()
-        self.queue = queue
-        self.mci = mci
-
-    def stop(self):
-        self._stop.set()
-
-    def stopped(self):
-        return self._stop.isSet()      
-
-    def run(self):
-        while True:
-            err_length, buf_length = self.mci.direct_send("status mus length")
-            err_position, buf_position = self.mci.direct_send("status mus position")
-            try:
-                position = int(buf_position) / 1000.0 # into seconds
-                total_time = int(buf_length) / 1000.0
-                percent = (position / total_time) * 100
-                if buf_position < buf_length:
-                    self.progress(40, percent)
-            except ValueError, e:
-                e
-            time.sleep(3)       
-            
-    def progress(self, width, percent):
-        marks = math.floor(width * (percent / 100.0))
-        spaces = math.floor(width - marks)
-     
-        loader = '[' + ('=' * int(marks)) + (' ' * int(spaces)) + ']'
-     
-        sys.stdout.write("%s %d%%\r" % (loader, percent))
-        if percent >= 100:
-            sys.stdout.write("\n")
-        sys.stdout.flush()                    
-                
 
 mci = MCI()                
 queue = Queue()
@@ -92,12 +49,6 @@ queue = Queue()
 def playMP3(name, mci):
     mci.direct_send("Close All")
     mci.direct_send("Open \"%s\" Type MPEGVideo Alias mus" % name)
-    #mciSend("Play mus Wait")
-    mci.direct_send("Play mus")
-    
-def playWav(name, mci):
-    mci.direct_send("Close All")
-    mci.direct_send("Open \"%s\" Type waveaudio Alias mus" % name)
     #mciSend("Play mus Wait")
     mci.direct_send("Play mus")
    
@@ -124,10 +75,11 @@ def get_filename(f):
         print "%s is not a valid thing" % f
     return name
     
-def get_input(prompt):
+def poll_wait(prompt, mci, queue, current_spot, current_album):
     done = False
     msg = ""
     sys.stdout.write(prompt)
+    #async looping, waiting for input and doing stuff! 
     while 1:
         if msvcrt.kbhit():
             input = msvcrt.getche()
@@ -136,17 +88,45 @@ def get_input(prompt):
             else:
                 print "\n"
                 return msg
+                
+        err_length, buf_length = mci.direct_send("status mus length")
+        err_position, buf_position = mci.direct_send("status mus position")
+        try:
+            position = int(buf_position) / 1000.0 # into seconds
+            total_time = int(buf_length) / 1000.0
+            if position >= total_time:
+                closeSong(mci)
+                if queue.queue:
+                    playMP3(queue.pop(), mci)
+                else:
+                    this_album = os.getcwd()[os.getcwd().rindex("\\") + 1:]
+                    if current_album == this_album:
+                        current_song += 1
+                        if current_song >= range(len(listdir)):
+                            current_song = 0
+                    else:
+                        current_song = 0
+                        listdir = os.listdir(os.getcwd())
+
+                    listdir = os.listdir(os.getcwd())
+                    if current_song in range(len(listdir)):
+                        
+                        f = get_filename(listdir[current_song])
+                        if f is not None:
+                            playMP3(f, mci)                    
+                
+        except ValueError, e:
+            e        
             
 def main():
     global queue
     global mci
+    current_spot = 0
+    current_album = ""
     
     os.chdir(r'C:\Users\Andrew\Music\iTunes\Music')
-    poll_queue = Poller(queue, mci)
-    poll_queue.start()
     while True:
-        #cmd = raw_input("%s $ " % os.getcwd())
-        cmd = get_input("%s $ " % os.getcwd())
+        cmd = poll_wait("%s $ " % os.getcwd(), mci, queue, current_spot, current_album)
         opt = cmd.split(" ")
         listdir = os.listdir(os.getcwd())
         try:
@@ -157,10 +137,12 @@ def main():
                     f = get_filename(listdir[int(opt[0])])
                     if f is not None:
                         print "\nPlaying ... %s\n" % f
+                        current_spot = int(opt[0])
                         playMP3(os.path.join(os.getcwd(), f), mci)
         except ValueError, e:
             pass      
-            
+
+        #commands 
         if opt[0] == "cd":
             newpath = " ".join(opt[1:])
             if "My " in newpath:
@@ -172,38 +154,56 @@ def main():
                 
         elif opt[0] == "close" or opt[0] == "c":
             closeSong(mci)
+
         elif opt[0] == "exit" or opt[0] == "e":
-            poll_queue.stop()
             closeSong(mci)
             sys.exit(0)
+
         elif opt[0] == "ls" or opt[0] == "l":
             for (i, name) in zip(range(len(listdir)), listdir):
                 print '[%s] %s' % (i, name)   
+
         elif opt[0] == "pause" or opt[0] == "p":
             pauseSong(mci)
+ 
         elif opt[0] == "resume" or opt[0] == "r":    
             resumeSong(mci)
+
         elif opt[0] == "queue" or opt[0] == "q":
             # queue up the song!
-            try:
-                (int(opt[1])) in range(len(listdir))
-                f = get_filename(listdir[int(opt[1])])
-                if f is not None:
-                    queue.push(f)
-                else:
+            if opt[1] == "all" or opt[1] == "a":
+                for song in listdir:
+                    f = get_filename(song)
+                    if f is not None:
+                        queue.push(f)
+            else:
+                try:
+                    if (int(opt[1])) in range(len(listdir)):
+                        f = get_filename(listdir[int(opt[1])])
+                        if f is not None:
+                            queue.push(f)
+                        else:
+                            print "Not a valid selection to queue"
+                except IndexError, e:
                     print "Not a valid selection to queue"
-            except IndexError, e:
-                print "Not a valid selection to queue"
             
         elif opt[0] == "show" or opt[0] == "s":
             print queue.queue
-        elif opt[0] == "try":
-            trySong(" ".join(opt[1:]), mci)            
             
+        elif opt[0] == "skip" or opt[0] == "k":
+            closeSong(mci)
+            if queue.queue:
+                playMP3(queue.pop(), mci)
+                
+        elif opt[0] == "clear" or opt[0] == "cl":
+            queue.queue = []
+
+        elif opt[0] == "try":
+            trySong(" ".join(opt[1:]), mci)
+
         try:
             pass
         except KeyboardInterrupt:
-            poll_queue.stop()
             sys.exit(0)
             
 if __name__ == "__main__":
