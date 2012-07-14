@@ -45,6 +45,8 @@ class MCI:
 
 mci = MCI()                
 queue = Queue()
+current_song = 0
+current_album = ""
 
 def playMP3(name, mci):
     mci.direct_send("Close All")
@@ -60,6 +62,13 @@ def pauseSong(mci):
     
 def resumeSong(mci):
     mci.direct_send("Resume mus")
+    
+def seekSong(pos, mci):
+    err_length, buf_length = mci.direct_send("status mus length")
+    if pos > buf_length:
+        pos = buf_length - 5
+    mci.direct_send("seek mus to %s" % pos)
+    mci.direct_send("play mus")
 
 def trySong(s, mci):
     print mci.direct_send(s)
@@ -75,10 +84,13 @@ def get_filename(f):
         print "%s is not a valid thing" % f
     return name
     
-def poll_wait(prompt, mci, queue, current_spot, current_album):
+def poll_wait(prompt, mci, queue):
     done = False
     msg = ""
     sys.stdout.write(prompt)
+    global current_album
+    global current_song
+    current_album = os.getcwd()[os.getcwd().rindex("\\") + 1:]
     #async looping, waiting for input and doing stuff! 
     while 1:
         if msvcrt.kbhit():
@@ -99,21 +111,23 @@ def poll_wait(prompt, mci, queue, current_spot, current_album):
                 if queue.queue:
                     playMP3(queue.pop(), mci)
                 else:
+                    listdir = os.listdir(os.getcwd())
                     this_album = os.getcwd()[os.getcwd().rindex("\\") + 1:]
                     if current_album == this_album:
-                        current_song += 1
-                        if current_song >= range(len(listdir)):
-                            current_song = 0
+                        if current_song >= len(listdir):
+                           current_song = 0                       
+                        current_song = current_song + 1
                     else:
                         current_song = 0
                         listdir = os.listdir(os.getcwd())
+                        current_album = this_album
 
-                    listdir = os.listdir(os.getcwd())
                     if current_song in range(len(listdir)):
-                        
                         f = get_filename(listdir[current_song])
                         if f is not None:
-                            playMP3(f, mci)                    
+                            print "\nPlaying ... %s\n" % f
+                            playMP3(f, mci)
+                            sys.stdout.write(prompt)
                 
         except ValueError, e:
             e        
@@ -121,12 +135,10 @@ def poll_wait(prompt, mci, queue, current_spot, current_album):
 def main():
     global queue
     global mci
-    current_spot = 0
-    current_album = ""
-    
+    global current_song
     os.chdir(r'C:\Users\Andrew\Music\iTunes\Music')
     while True:
-        cmd = poll_wait("%s $ " % os.getcwd(), mci, queue, current_spot, current_album)
+        cmd = poll_wait("%s $ " % os.getcwd(), mci, queue)
         opt = cmd.split(" ")
         listdir = os.listdir(os.getcwd())
         try:
@@ -137,7 +149,7 @@ def main():
                     f = get_filename(listdir[int(opt[0])])
                     if f is not None:
                         print "\nPlaying ... %s\n" % f
-                        current_spot = int(opt[0])
+                        current_song = int(opt[0])
                         playMP3(os.path.join(os.getcwd(), f), mci)
         except ValueError, e:
             pass      
@@ -184,7 +196,7 @@ def main():
                             queue.push(f)
                         else:
                             print "Not a valid selection to queue"
-                except IndexError, e:
+                except ValueError, e:
                     print "Not a valid selection to queue"
             
         elif opt[0] == "show" or opt[0] == "s":
@@ -201,6 +213,12 @@ def main():
         elif opt[0] == "try":
             trySong(" ".join(opt[1:]), mci)
 
+        elif opt[0] == "seek" or opt[0] == "sk":
+            try:
+                pos = int(opt[1])
+                seekSong(pos, mci)
+            except ValueError, e:
+                pass
         try:
             pass
         except KeyboardInterrupt:
