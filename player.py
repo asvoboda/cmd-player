@@ -104,8 +104,8 @@ def poll_wait(prompt, mci, queue):
         err_length, buf_length = mci.direct_send("status mus length")
         err_position, buf_position = mci.direct_send("status mus position")
         try:
-            position = int(buf_position) / 1000.0 # into seconds
-            total_time = int(buf_length) / 1000.0
+            position = int(buf_position)
+            total_time = int(buf_length)
             if position >= total_time:
                 closeSong(mci)
                 if queue.queue:
