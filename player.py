@@ -114,10 +114,12 @@ def poll_wait(prompt, mci, queue):
                     listdir = os.listdir(os.getcwd())
                     this_album = os.getcwd()[os.getcwd().rindex("\\") + 1:]
                     if current_album == this_album:
-                        if current_song >= len(listdir):
-                           current_song = 0                       
-                        current_song = current_song + 1
-                    else:
+                        if current_song >= len(listdir) - 1:
+                           current_song = 0
+                        else:
+                            current_song = current_song + 1
+
+                        else:
                         current_song = 0
                         listdir = os.listdir(os.getcwd())
                         current_album = this_album
