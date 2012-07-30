@@ -3,6 +3,7 @@ import os
 import msvcrt
 import time
 import sys
+import subprocess
 
 class Queue():
     def __init__(self):
@@ -84,10 +85,23 @@ def get_filename(f):
         print "%s is not a valid thing" % f
     return name
     
+def tab_complete(start_string):
+    list = os.listdir(os.getcwd())
+    count = 0 
+    rest = ""
+    for item in list:
+        if item.startswith(start_string):
+            if count > 0:
+                rest += ", %s" % item
+            else:
+                rest = item
+            count += 1
+    return count, rest
+
 def poll_wait(prompt, mci, queue):
     done = False
     msg = ""
-    sys.stdout.write(prompt)
+    sys.stdout.write(prompt+"\n")
     global current_album
     global current_song
     current_album = os.getcwd()[os.getcwd().rindex("\\") + 1:]
@@ -95,8 +109,22 @@ def poll_wait(prompt, mci, queue):
     while 1:
         if msvcrt.kbhit():
             input = msvcrt.getche()
-            if input != "\r":
+            if input == "\b" and msg:
+                msg = msg[:-1]
+                sys.stdout.write('\r'+msg +" " + "\b")
+            elif input == "\t":
+                split = msg.split()
+                to_complete = ' '.join(split[1:])
+                num, to_print = tab_complete(to_complete)
+                the_rest = split[0]
+                if num == 1:
+                    msg = the_rest + " " + to_print
+                elif num > 1:
+                    msg = to_print
+                sys.stdout.write('\r' + msg)
+            elif input != "\r":
                 msg += input
+                sys.stdout.write('\r'+msg)
             else:
                 print "\n"
                 return msg
@@ -130,7 +158,7 @@ def poll_wait(prompt, mci, queue):
                             print "\nPlaying ... %s\n" % f
                             playMP3(f, mci)
                             sys.stdout.write(prompt)
-            time.sleep(0.05)    
+            time.sleep(0.09)    
         except ValueError, e:
             e        
             
@@ -176,7 +204,7 @@ def main():
         elif opt[0] == "ls" or opt[0] == "l":
             for (i, name) in zip(range(len(listdir)), listdir):
                 print '[%s] %s' % (i, name)   
-
+            
         elif opt[0] == "pause" or opt[0] == "p":
             pauseSong(mci)
  
