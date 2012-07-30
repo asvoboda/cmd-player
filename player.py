@@ -85,17 +85,42 @@ def get_filename(f):
         print "%s is not a valid thing" % f
     return name
     
-def tab_complete(start_string):
+def find_largest_in_common(others, start_string):
+    rest = min(others, key=len)
+    largest_length = len(rest)
+    build = start_string
+    pos = 0
+
+    while len(build) < largest_length:
+        good = True
+        for item in others:
+            pos = len(build)
+            if rest[pos] != item[pos]:
+                good = False
+        if good:
+            build += rest[pos]
+        else:
+            break
+
+    return build
+    
+def tab_complete(start_string, show):
     list = os.listdir(os.getcwd())
     count = 0 
     rest = ""
+    others = []
     for item in list:
         if item.startswith(start_string):
-            if count > 0:
-                rest += ", %s" % item
-            else:
+            others.append(item)
+            if count == 0:
                 rest = item
             count += 1
+    if count > 1:
+        if show:
+            rest = ", ".join(others)
+        else:
+            rest = find_largest_in_common(others, start_string)
+            #rest = min(others, key=len)
     return count, rest
 
 def poll_wait(prompt, mci, queue):
@@ -109,18 +134,25 @@ def poll_wait(prompt, mci, queue):
     while 1:
         if msvcrt.kbhit():
             input = msvcrt.getche()
+            
             if input == "\b" and msg:
                 msg = msg[:-1]
                 sys.stdout.write('\r'+msg +" " + "\b")
             elif input == "\t":
                 split = msg.split()
                 to_complete = ' '.join(split[1:])
-                num, to_print = tab_complete(to_complete)
                 the_rest = split[0]
-                if num == 1:
-                    msg = the_rest + " " + to_print
-                elif num > 1:
+                if last_input == "\t":
+                    num, to_print = tab_complete(to_complete, True)
                     msg = to_print
+                else:
+                    num, to_print = tab_complete(to_complete, False)
+                    msg = the_rest + " " + to_print
+                
+                #if num == 1:
+                #    msg = the_rest + " " + to_print
+                #elif num > 1:
+                #    msg = to_print
                 sys.stdout.write('\r' + msg)
             elif input != "\r":
                 msg += input
@@ -128,6 +160,8 @@ def poll_wait(prompt, mci, queue):
             else:
                 print "\n"
                 return msg
+
+            last_input = input
                 
         err_length, buf_length = mci.direct_send("status mus length")
         err_position, buf_position = mci.direct_send("status mus position")
