@@ -44,10 +44,19 @@ class MCI:
             #print 'Error', str(err), 'on', txt, ':', buf
         return err, buf        
 
-mci = MCI()                
-queue = Queue()
-current_song = 0
-current_album = ""
+def get_windows_term_width():
+    from ctypes import windll, create_string_buffer
+    h = windll.kernel32.GetStdHandle(-12)
+    csbi = create_string_buffer(22)
+    res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
+    if res:
+        import struct
+        (bufx, bufy, curx, cury, wattr,
+         left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
+        sizex = right - left + 1
+    else:
+        sizex = 80
+    return sizex
 
 def playMP3(name, mci):
     mci.direct_send("Close All")
@@ -104,6 +113,31 @@ def find_largest_in_common(others, start_string):
 
     return build
     
+def format_columns(mylist, cols):
+    col_width = max(len(word) for word in mylist) + 2  # padding
+    template = ""
+    for i in range(cols):
+        template += "{%s:%s}" % (i, col_width)
+
+    data = []
+    for i in range(0, len(mylist), cols):
+        data.append(mylist[i:i+cols])
+
+    for row in data:
+        try:
+            print template.format(*row)
+        except IndexError:
+            #last row might be too small for the template
+            for k in range(cols - 1, 0, -1):
+                try:
+                    new_template = ""
+                    for i in range(k):
+                        new_template += "{%s:%s}" % (i, col_width)
+                    print new_template.format(*row)
+                    break
+                except IndexError:
+                    continue
+    
 def tab_complete(start_string, show):
     list = os.listdir(os.getcwd())
     count = 0 
@@ -120,7 +154,6 @@ def tab_complete(start_string, show):
             rest = ", ".join(others)
         else:
             rest = find_largest_in_common(others, start_string)
-            #rest = min(others, key=len)
     return count, rest
 
 def poll_wait(prompt, mci, queue):
@@ -194,7 +227,12 @@ def poll_wait(prompt, mci, queue):
                             sys.stdout.write(prompt)
             time.sleep(0.09)    
         except ValueError, e:
-            e        
+            e     
+
+mci = MCI()
+queue = Queue()
+current_song = 0
+current_album = ""
             
 def main():
     global queue
@@ -236,8 +274,12 @@ def main():
             sys.exit(0)
 
         elif opt[0] == "ls" or opt[0] == "l":
+            print_list = []
+            term_width = get_windows_term_width()
+            num_cols = term_width / 40
             for (i, name) in zip(range(len(listdir)), listdir):
-                print '[%s] %s' % (i, name)   
+                print_list.append('[%s] %s' % (i, name))
+            format_columns(print_list, num_cols)
             
         elif opt[0] == "pause" or opt[0] == "p":
             pauseSong(mci)
