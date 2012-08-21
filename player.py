@@ -182,10 +182,6 @@ def poll_wait(prompt, mci, queue):
                     num, to_print = tab_complete(to_complete, False)
                     msg = the_rest + " " + to_print
                 
-                #if num == 1:
-                #    msg = the_rest + " " + to_print
-                #elif num > 1:
-                #    msg = to_print
                 sys.stdout.write('\r' + msg)
             elif input != "\r":
                 msg += input
@@ -242,19 +238,7 @@ def main():
     while True:
         cmd = poll_wait("%s $ " % os.getcwd(), mci, queue)
         opt = cmd.split(" ")
-        listdir = os.listdir(os.getcwd())
-        try:
-            if (int(opt[0])) in range(len(listdir)):
-                if os.path.isdir(listdir[int(opt[0])]):
-                    os.chdir(listdir[int(opt[0])])            
-                else:
-                    f = get_filename(listdir[int(opt[0])])
-                    if f:
-                        print "\nPlaying ... %s\n" % f
-                        current_song = int(opt[0])
-                        playMP3(os.path.join(os.getcwd(), f), mci)
-        except ValueError, e:
-            pass      
+        listdir = os.listdir(os.getcwd()) 
 
         #commands 
         if opt[0] == "cd":
@@ -283,9 +267,7 @@ def main():
             print_list = []
             term_width = get_windows_term_width()
             num_cols = term_width / 40
-            for (i, name) in zip(range(len(listdir)), listdir):
-                print_list.append('[%s] %s' % (i, name))
-            format_columns(print_list, num_cols)
+            format_columns(listdir, num_cols)
             
         elif opt[0] == "pause":
             pauseSong(mci)
