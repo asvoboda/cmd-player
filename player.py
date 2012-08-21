@@ -249,7 +249,7 @@ def main():
                     os.chdir(listdir[int(opt[0])])            
                 else:
                     f = get_filename(listdir[int(opt[0])])
-                    if f is not None:
+                    if f:
                         print "\nPlaying ... %s\n" % f
                         current_song = int(opt[0])
                         playMP3(os.path.join(os.getcwd(), f), mci)
@@ -268,7 +268,13 @@ def main():
                 
         elif opt[0] == "close" or opt[0] == "c":
             closeSong(mci)
-
+            
+        elif opt[0] == "play" or opt[0] == "p":
+            f = get_filename(' '.join(opt[1:]))
+            if f:
+                print "\nPlaying ... %s\n" % f
+                playMP3(os.path.join(os.getcwd(), f), mci)
+                
         elif opt[0] == "exit" or opt[0] == "e":
             closeSong(mci)
             sys.exit(0)
@@ -281,7 +287,7 @@ def main():
                 print_list.append('[%s] %s' % (i, name))
             format_columns(print_list, num_cols)
             
-        elif opt[0] == "pause" or opt[0] == "p":
+        elif opt[0] == "pause":
             pauseSong(mci)
  
         elif opt[0] == "resume" or opt[0] == "r":    
@@ -313,7 +319,7 @@ def main():
             if queue.queue:
                 playMP3(queue.pop(), mci)
                 
-        elif opt[0] == "clear" or opt[0] == "cl":
+        elif opt[0] == "clear":
             queue.queue = []
 
         elif opt[0] == "try":
