@@ -3,15 +3,13 @@ import os
 import msvcrt
 import time
 import sys
-import subprocess
-import optparse
 
 class Queue():
 	def __init__(self):
 		self.queue = []
-	def push(self, x):
+	def enqueue(self, x):
 		self.queue.append(x)
-	def pop(self):
+	def dequeue(self):
 		try:
 			tmp = self.queue[0]
 			self.queue.remove(tmp)
@@ -46,7 +44,7 @@ class MCI:
 	def direct_send(self, txt):
 		(err,buf) = self.send(txt)
 		return err, buf       
-	##public	
+	##externals	
 	def playMP3(self, name):
 		self.direct_send("Close All")
 		self.direct_send("Open \"%s\" Type MPEGVideo Alias mus" % name)
@@ -68,8 +66,9 @@ class MCI:
 
 def get_filename(f):
 	name = None
+	exts = ("mp3", "wav", "m4a", "MP3", "WAV", "M4A")
 	if os.path.isfile(f):
-		if f.endswith("mp3") or f.endswith("MP3") or f.endswith("WAV") or f.endswith("wav") or f.endswith("M4A") or f.endswith("m4a"):
+		if f.endswith(exts):
 			name = os.path.join(os.getcwd(), f)
 		else:
 			print "Not a valid media type"
@@ -138,38 +137,43 @@ def tab_complete(start_string, show):
 		else:
 			rest = find_largest_in_common(others, start_string)
 	return count, rest
+	
+def handle_whitespace_chars(msg, input, last_input):
+	if input == "\b" and msg:
+		msg = msg[:-1]
+		sys.stdout.write("\r" + msg + " " + "\b")
+	elif input == "\t":
+		split = msg.split()
+		to_complete = " ".join(split[1:])
+		the_rest = split[0]
+		if last_input == "\t":
+			num, to_print = tab_complete(to_complete, True)
+			msg = to_print
+		else:
+			num, to_print = tab_complete(to_complete, False)
+			msg = the_rest + " " + to_print
+		sys.stdout.write("\r" + msg)
+	elif input != "\r":
+		msg += input
+		sys.stdout.write("\r" + msg)
+	else:
+		print "\n"
+		return msg, True
+	return msg, False
 		
-def poll_wait(prompt, mci, queue):
+def get_input(prompt, mci, queue):
 	msg = ""
 	sys.stdout.write(prompt+"\n")
+	last_input = ""
 	#async looping, waiting for input and doing stuff! 
 	while 1:
 		if msvcrt.kbhit():
 			input = msvcrt.getche()
-			
-			if input == "\b" and msg:
-				msg = msg[:-1]
-				sys.stdout.write('\r'+msg +" " + "\b")
-			elif input == "\t":
-				split = msg.split()
-				to_complete = ' '.join(split[1:])
-				the_rest = split[0]
-				if last_input == "\t":
-					num, to_print = tab_complete(to_complete, True)
-					msg = to_print
-				else:
-					num, to_print = tab_complete(to_complete, False)
-					msg = the_rest + " " + to_print
-				
-				sys.stdout.write('\r' + msg)
-			elif input != "\r":
-				msg += input
-				sys.stdout.write('\r'+msg)
-			else:
-				print "\n"
-				return msg
-
+			msg, should_return = handle_whitespace_chars(msg, input, last_input)
 			last_input = input
+			if should_return:
+				return msg
+			
 				
 		err_length, buf_length = mci.direct_send("status mus length")
 		err_position, buf_position = mci.direct_send("status mus position")
@@ -179,27 +183,17 @@ def poll_wait(prompt, mci, queue):
 			if position >= total_time:
 				mci.closeSong()
 				if not queue.empty():
-					song = queue.pop()
+					song = queue.dequeue()
 					print "\nPlaying ... %s\n" % song
 					mci.playMP3(song)
 			time.sleep(0.09)    
 		except ValueError, e:
 			if not queue.empty():
-					song = queue.pop()
+					song = queue.dequeue()
 					print "\nPlaying ... %s\n" % song
 					mci.playMP3(song)
 
-
-            
-def main():
-	mci = MCI()
-	queue = Queue()
-	os.chdir(r'C:\Users\Andrew\Music\iTunes\Music')
-	while True:
-		cmd = poll_wait("%s $ " % os.getcwd(), mci, queue)
-		opt = cmd.split(" ")
-		listdir = os.listdir(os.getcwd()) 
-
+def process_input(opt, listdir, mci, queue):
 		#commands 
 		if opt[0] == "cd":
 			newpath = " ".join(opt[1:])
@@ -219,7 +213,7 @@ def main():
 				print "\nPlaying ... %s\n" % f
 				mci.playMP3(os.path.join(os.getcwd(), f))
 				
-		elif opt[0] == "exit" or opt[0] == "e":
+		elif opt[0] == "exit":
 			mci.closeSong()
 			sys.exit(0)
 
@@ -230,7 +224,7 @@ def main():
 		elif opt[0] == "pause":
 			mci.pauseSong()
 
-		elif opt[0] == "resume" or opt[0] == "r":    
+		elif opt[0] == "resume":    
 			mci.resumeSong()
 
 		elif opt[0] == "queue" or opt[0] == "q":
@@ -238,21 +232,21 @@ def main():
 				for song in listdir:
 					f = get_filename(song)
 					if f:
-						queue.push(f)
+						queue.enqueue(f)
 			else:
 				f = get_filename(" ".join(opt[1:]))
 				if f:
-					queue.push(f)
+					queue.enqueue(f)
 				else:
 					print "Not a valid selection to queue"
 			
 		elif opt[0] == "show" or opt[0] == "s":
 			print queue.show()
 			
-		elif opt[0] == "skip" or opt[0] == "k" or opt[0] == "pq":
+		elif opt[0] == "skip" or opt[0] == "k":
 			mci.closeSong()
 			if not queue.empty():
-				song = queue.pop()
+				song = queue.dequeue()
 				print "\nPlaying ... %s\n" % song
 				mci.playMP3(song)
 				
@@ -262,12 +256,23 @@ def main():
 		elif opt[0] == "try":
 			mci.trySong(" ".join(opt[1:]))
 
-		elif opt[0] == "seek" or opt[0] == "sk":
+		elif opt[0] == "seek":
 			try:
 				pos = int(opt[1])
 				mci.seekSong(pos)
 			except ValueError, e:
 				pass
+            
+def main():
+	mci = MCI()
+	queue = Queue()
+	os.chdir(r'C:\Users\Andrew\Music\iTunes\Music')
+	while True:
+		cmd = get_input("%s $ " % os.getcwd(), mci, queue)
+		opt = cmd.split(" ")
+		listdir = os.listdir(os.getcwd()) 
+		process_input(opt, listdir, mci, queue)
+
 		try:
 			pass
 		except KeyboardInterrupt:
