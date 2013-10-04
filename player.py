@@ -3,6 +3,7 @@ import os
 import msvcrt
 import time
 import sys
+import pprint
 
 class Queue():
 	def __init__(self):
@@ -17,7 +18,7 @@ class Queue():
 		except IndexError, e:
 			print e
 		return None
-	def empty(self):
+	def isEmpty(self):
 		return len(self.queue) == 0
 	def clear(self):
 		self.queue = []
@@ -182,19 +183,22 @@ def get_input(prompt, mci, queue):
 			total_time = int(buf_length)
 			if position >= total_time:
 				mci.closeSong()
-				if not queue.empty():
+				if not queue.isEmpty():
 					song = queue.dequeue()
 					print "\nPlaying ... %s\n" % song
 					mci.playMP3(song)
 			time.sleep(0.09)    
 		except ValueError, e:
-			if not queue.empty():
+			if not queue.isEmpty():
 					song = queue.dequeue()
 					print "\nPlaying ... %s\n" % song
 					mci.playMP3(song)
 
-def process_input(opt, listdir, mci, queue):
+def process_input(opt, listdir, mci, queue, pprint):
 		#commands 
+		if not opt[0]:
+			return 0
+
 		if opt[0] == "cd":
 			newpath = " ".join(opt[1:])
 			if "My " in newpath:
@@ -204,8 +208,9 @@ def process_input(opt, listdir, mci, queue):
 			else:
 				print "%s is not a valid directory" % " ".join(opt[1:])  
 				
-		elif opt[0] == "close" or opt[0] == "c":
-			mci.closeSong()
+		elif opt[0] == "ls" or opt[0] == "l":
+			num_cols = 2
+			format_columns(listdir, num_cols)
 			
 		elif opt[0] == "play" or opt[0] == "p":
 			f = get_filename(' '.join(opt[1:]))
@@ -216,43 +221,54 @@ def process_input(opt, listdir, mci, queue):
 		elif opt[0] == "exit":
 			mci.closeSong()
 			sys.exit(0)
-
-		elif opt[0] == "ls" or opt[0] == "l":
-			num_cols = 2
-			format_columns(listdir, num_cols)
 			
-		elif opt[0] == "pause":
-			mci.pauseSong()
-
-		elif opt[0] == "resume":    
-			mci.resumeSong()
-
+		## song operations
+		elif opt[0] == "song" or opt[0] == "s":
+			if not opt[1]:
+				return false
+				
+			if opt[1] == "resume" or opt[1] == "r":
+				mci.resumeSong()
+							
+			elif opt[1] == "pause" or opt[1] == "p":
+				mci.pauseSong()
+				
+			elif opt[1] == "skip" or opt[1] == "k":
+				mci.closeSong()
+				if not queue.isEmpty():
+					song = queue.dequeue()
+					print "\nPlaying ... %s\n" % song
+					mci.playMP3(song)
+					
+			elif opt[1] == "stop" or opt[1] == "s":
+				mci.closeSong()
+				queue.clear()
+				
+		#queue operations
 		elif opt[0] == "queue" or opt[0] == "q":
+			if not opt[1]:
+				return false
+				
 			if opt[1] == "all" or opt[1] == "a":
 				for song in listdir:
 					f = get_filename(song)
 					if f:
 						queue.enqueue(f)
+
+			elif opt[1] == "clear" or opt[1] == "c":
+				queue.clear()
+
+			elif opt[1] == "show" or opt[1] == "s":
+				pprint.pprint(queue.show())
+
 			else:
 				f = get_filename(" ".join(opt[1:]))
 				if f:
 					queue.enqueue(f)
 				else:
 					print "Not a valid selection to queue"
-			
-		elif opt[0] == "show" or opt[0] == "s":
-			print queue.show()
-			
-		elif opt[0] == "skip" or opt[0] == "k":
-			mci.closeSong()
-			if not queue.empty():
-				song = queue.dequeue()
-				print "\nPlaying ... %s\n" % song
-				mci.playMP3(song)
 				
-		elif opt[0] == "clear":
-			queue.clear()
-
+		## debuging options
 		elif opt[0] == "try":
 			mci.trySong(" ".join(opt[1:]))
 
@@ -266,15 +282,17 @@ def process_input(opt, listdir, mci, queue):
 def main():
 	mci = MCI()
 	queue = Queue()
+	pp = pprint.PrettyPrinter(indent=4)
+	#TODO: try to grab this dynamically?
 	os.chdir(r'C:\Users\Andrew\Music\iTunes\Music')
 	while True:
 		cmd = get_input("%s $ " % os.getcwd(), mci, queue)
 		opt = cmd.split(" ")
 		listdir = os.listdir(os.getcwd()) 
-		process_input(opt, listdir, mci, queue)
+		process_input(opt, listdir, mci, queue, pp)
 
 		try:
-			pass
+			pass #TODO: handle keyboard interrupt better
 		except KeyboardInterrupt:
 			sys.exit(0)
 	
