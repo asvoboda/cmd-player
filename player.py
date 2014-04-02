@@ -10,6 +10,29 @@ from utils import handle_whitespace_chars, get_filename
 from env import get_environment
 
 
+HELP_TEXT = """
+Dumb Python Player
+==================
+`cd [dir]` to change directories
+`ls` to list directories
+`play [song]` to play the specified song
+
+Playlist Operations
+`queue all` adds all songs in the current directory to your playlist
+`queue show` prints the songs in your playlist
+`queue clear` clears the playlist
+`queue [song]` adds the specified song to your playlist
+
+Song Operations
+`song pause` to pause the current song
+`song resume` resumes a paused song
+`song skip` to skip to the next song in the playlist
+`song stop` stops execution and clears the playlist
+
+`exit` to exit
+"""
+
+
 def get_input(prompt, mci, queue):
     msg = ""
     sys.stdout.write(prompt + "\n")
@@ -55,6 +78,9 @@ def process_input(opt, listdir, mci, queue, pprint):
             os.chdir(" ".join(opt[1:]))
         else:
             print("%s is not a valid directory" % " ".join(opt[1:]))
+
+    elif opt[0] == "help" or opt[0] == "h":
+        print(HELP_TEXT)
 
     elif opt[0] == "ls" or opt[0] == "l":
         ret = call("ls")
