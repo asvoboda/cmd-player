@@ -45,3 +45,9 @@ class MCI():
 
     def try_song(self, s):
         print(self.direct_send(s))
+
+    def length(self):
+        return self.direct_send("status mus length")
+
+    def position(self):
+        return self.direct_send("status mus position")

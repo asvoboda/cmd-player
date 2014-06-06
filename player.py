@@ -1,13 +1,14 @@
 import os
-import msvcrt
 import time
 import sys
 import pprint
+import Queue as qu
+
 from MCI import MCI
-from Queue import Queue
 from subprocess import call
 from utils import handle_whitespace_chars, get_filename
 from env import get_environment
+from KBHit import KBHit
 
 
 HELP_TEXT = """
@@ -33,34 +34,34 @@ Song Operations
 """
 
 
-def get_input(prompt, mci, queue):
+def get_input(prompt, mci, queue, kb):
     msg = ""
     sys.stdout.write(prompt + "\n")
     last_input = ""
     #async looping, waiting for input and doing stuff!
     while 1:
-        if msvcrt.kbhit():
-            input = msvcrt.getche()
-            msg, should_return = handle_whitespace_chars(msg, input, last_input)
-            last_input = input
+        if kb.kbhit():
+            c = kb.getch()
+            msg, should_return = handle_whitespace_chars(msg, c, last_input)
+            last_input = c
             if should_return:
                 return msg
 
-        err_length, buf_length = mci.direct_send("status mus length")
-        err_position, buf_position = mci.direct_send("status mus position")
+        err_length, buf_length = mci.length()
+        err_position, buf_position = mci.position()
         try:
             position = int(buf_position)
             total_time = int(buf_length)
             if position >= total_time:
                 mci.close_song()
-                if not queue.is_empty():
-                    song = queue.dequeue()
+                if not queue.empty():
+                    song = queue.get()
                     print("\nPlaying ... %s\n" % song)
                     mci.play_song(song)
             time.sleep(0.09)
         except ValueError:
-            if not queue.is_empty():
-                song = queue.dequeue()
+            if not queue.empty():
+                song = queue.get()
                 print("\nPlaying ... %s\n" % song)
                 mci.play_song(song)
 
@@ -108,8 +109,8 @@ def process_input(opt, listdir, mci, queue, pprint):
 
         elif opt[1] == "skip" or opt[1] == "k":
             mci.close_song()
-            if not queue.is_empty():
-                song = queue.dequeue()
+            if not queue.empty():
+                song = queue.get()
                 print("\nPlaying ... %s\n" % song)
                 mci.play_song(song)
 
@@ -126,7 +127,7 @@ def process_input(opt, listdir, mci, queue, pprint):
             for song in listdir:
                 f = get_filename(song)
                 if f:
-                    queue.enqueue(f)
+                    queue.put(f)
 
         elif opt[1] == "clear" or opt[1] == "c":
             queue.clear()
@@ -137,7 +138,7 @@ def process_input(opt, listdir, mci, queue, pprint):
         else:
             f = get_filename(" ".join(opt[1:]))
             if f:
-                queue.enqueue(f)
+                queue.put(f)
             else:
                 print("Not a valid selection to queue")
 
@@ -154,13 +155,15 @@ def process_input(opt, listdir, mci, queue, pprint):
 
 
 def main():
+    kb = KBHit()
     mci = MCI()
-    queue = Queue()
+    queue = qu.Queue()
     pp = pprint.PrettyPrinter(indent=4)
     environment = get_environment()
     os.chdir(environment['music_home'])
+
     while 1:
-        cmd = get_input("%s $ " % os.getcwd(), mci, queue)
+        cmd = get_input("%s $ " % os.getcwd(), mci, queue, kb)
         opt = cmd.split(" ")
         listdir = os.listdir(os.getcwd())
         try:
