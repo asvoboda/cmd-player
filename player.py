@@ -19,10 +19,10 @@ Dumb Python Player
 `play [song]` to play the specified song
 
 Playlist Operations
-`queue all` adds all songs in the current directory to your playlist
-`queue show` prints the songs in your playlist
-`queue clear` clears the playlist
-`queue [song]` adds the specified song to your playlist
+`playlist all` adds all songs in the current directory to your playlist
+`playlist show` prints the songs in your playlist
+`playlist clear` clears the playlist
+`playlist [song]` adds the specified song to your playlist
 
 Song Operations
 `song pause` to pause the current song
@@ -33,11 +33,13 @@ Song Operations
 `exit` to exit
 """
 
+playlist = qu.Queue()
 
-def get_input(prompt, mci, queue, kb):
+def get_input(prompt, mci, kb):
     msg = ""
     sys.stdout.write(prompt + "\n")
     last_input = ""
+    global playlist
     #async looping, waiting for input and doing stuff!
     while 1:
         if kb.kbhit():
@@ -54,22 +56,24 @@ def get_input(prompt, mci, queue, kb):
             total_time = int(buf_length)
             if position >= total_time:
                 mci.close_song()
-                if not queue.empty():
-                    song = queue.get()
+                if not playlist.empty():
+                    song = playlist.get()
                     print("\nPlaying ... %s\n" % song)
                     mci.play_song(song)
             time.sleep(0.09)
         except ValueError:
-            if not queue.empty():
-                song = queue.get()
+            if not playlist.empty():
+                song = playlist.get()
                 print("\nPlaying ... %s\n" % song)
                 mci.play_song(song)
 
 
-def process_input(opt, listdir, mci, queue, pprint):
+def process_input(opt, listdir, mci, pprint):
     #commands
     if not opt[0]:
         return 0
+
+    global playlist
 
     if opt[0] == "cd":
         newpath = " ".join(opt[1:])
@@ -86,7 +90,7 @@ def process_input(opt, listdir, mci, queue, pprint):
     elif opt[0] == "ls" or opt[0] == "l":
         ret = call("ls")
 
-    elif opt[0] == "play" or opt[0] == "p":
+    elif opt[0] == "play":
         f = get_filename(' '.join(opt[1:]))
         if f:
             print("\nPlaying ... %s\n" % f)
@@ -109,17 +113,17 @@ def process_input(opt, listdir, mci, queue, pprint):
 
         elif opt[1] == "skip" or opt[1] == "k":
             mci.close_song()
-            if not queue.empty():
-                song = queue.get()
+            if not playlist.empty():
+                song = playlist.get()
                 print("\nPlaying ... %s\n" % song)
                 mci.play_song(song)
 
         elif opt[1] == "stop" or opt[1] == "s":
             mci.close_song()
-            queue.clear()
+            playlist = qu.Queue()
 
-    #queue operations
-    elif opt[0] == "queue" or opt[0] == "q":
+    #playlist operations
+    elif opt[0] == "playlist" or opt[0] == "p":
         if not opt[1]:
             return False
 
@@ -127,20 +131,20 @@ def process_input(opt, listdir, mci, queue, pprint):
             for song in listdir:
                 f = get_filename(song)
                 if f:
-                    queue.put(f)
+                    playlist.put(f)
 
         elif opt[1] == "clear" or opt[1] == "c":
-            queue.clear()
+            playlist = qu.Queue()
 
         elif opt[1] == "show" or opt[1] == "s":
-            pprint.pprint(queue.show())
+            pprint.pprint(playlist.queue)
 
         else:
             f = get_filename(" ".join(opt[1:]))
             if f:
-                queue.put(f)
+                playlist.put(f)
             else:
-                print("Not a valid selection to queue")
+                print("Not a valid selection to playlist")
 
     ## debuging options
     elif opt[0] == "try":
@@ -157,17 +161,17 @@ def process_input(opt, listdir, mci, queue, pprint):
 def main():
     kb = KBHit()
     mci = MCI()
-    queue = qu.Queue()
+    
     pp = pprint.PrettyPrinter(indent=4)
     environment = get_environment()
     os.chdir(environment['music_home'])
 
     while 1:
-        cmd = get_input("%s $ " % os.getcwd(), mci, queue, kb)
+        cmd = get_input("%s $ " % os.getcwd(), mci, kb)
         opt = cmd.split(" ")
         listdir = os.listdir(os.getcwd())
         try:
-            process_input(opt, listdir, mci, queue, pp)
+            process_input(opt, listdir, mci, pp)
         except IndexError:
             print("Invalid option")
 
