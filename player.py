@@ -2,184 +2,203 @@ import os
 import time
 import sys
 import pprint
+import cmd
+import threading
 import Queue as qu
 
 from MCI import MCI
 from subprocess import call
-from utils import handle_whitespace_chars, get_filename
+from utils import get_filename
 from env import get_environment
-from KBHit import KBHit
+
+#Windows doesn't have a readline package :(
+try:
+    import readline
+except ImportError:
+    import pyreadline as readline
 
 
-HELP_TEXT = """
-Dumb Python Player
-==================
-`cd [dir]` to change directories
-`ls` to list directories
-`play [song]` to play the specified song
+class Enum(set):
+    def __getattr__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
 
-Playlist Operations
-`playlist all` adds all songs in the current directory to your playlist
-`playlist show` prints the songs in your playlist
-`playlist clear` clears the playlist
-`playlist [song]` adds the specified song to your playlist
+class PlayerShell(cmd.Cmd):
+    intro = 'Dumb Python Player. Type "help" or "?"" to list commands.\n'
+    prompt = '> '
+    token = '> '
 
-Song Operations
-`song pause` to pause the current song
-`song resume` resumes a paused song
-`song skip` to skip to the next song in the playlist
-`song stop` stops execution and clears the playlist
+    def preloop(self):
+        self.mci = MCI()
+        self.playlist = qu.Queue()
+        self.pp = pprint.PrettyPrinter(indent=4)
+        self.running = True
+        self.types = Enum(["PLAY", "PAUSE", "CLOSE", "RESUME"])
+        self.messages = qu.Queue()
+        environment = get_environment()
+        self.chdir(environment['music_home'])
 
-`exit` to exit
-"""
+        consumer = threading.Thread(target=self.player)
+        consumer.daemon = True
 
-playlist = qu.Queue()
-
-def get_input(prompt, mci, kb):
-    msg = ""
-    sys.stdout.write(prompt + "\n")
-    last_input = ""
-    global playlist
-    #async looping, waiting for input and doing stuff!
-    while 1:
-        if kb.kbhit():
-            c = kb.getch()
-            msg, should_return = handle_whitespace_chars(msg, c, last_input)
-            last_input = c
-            if should_return:
-                return msg
-
-        err_length, buf_length = mci.length()
-        err_position, buf_position = mci.position()
-        try:
-            position = int(buf_position)
-            total_time = int(buf_length)
-            if position >= total_time:
-                mci.close_song()
-                if not playlist.empty():
-                    song = playlist.get()
-                    print("\nPlaying ... %s\n" % song)
-                    mci.play_song(song)
-            time.sleep(0.09)
-        except ValueError:
-            if not playlist.empty():
-                song = playlist.get()
-                print("\nPlaying ... %s\n" % song)
-                mci.play_song(song)
+        consumer.start()
 
 
-def process_input(opt, listdir, mci, pprint):
-    #commands
-    if not opt[0]:
-        return 0
+    def do_exit(self, arg):
+        'Stop playing, and exit.'
 
-    global playlist
+        self.messages.put(self.types.CLOSE)
 
-    if opt[0] == "cd":
-        newpath = " ".join(opt[1:])
-        if "My " in newpath:
-            newpath.replace("My ", "")
-        if os.path.isdir(" ".join(opt[1:])):
-            os.chdir(" ".join(opt[1:]))
+        self.running = False
+        return True
+
+    def do_cd(self, arg):
+        'Change directory to the argument specified'
+        #windows hack
+        if "My " in arg:
+            arg.replace("My ", "")
+        if os.path.isdir(arg):
+            self.chdir(arg)
         else:
-            print("%s is not a valid directory" % " ".join(opt[1:]))
+            print("%s is not a valid directory" % arg)
 
-    elif opt[0] == "help" or opt[0] == "h":
-        print(HELP_TEXT)
+    def complete_cd(self, text, line, begidx, endidx):
+        return self.complete_helper(text, line, begidx, endidx)
 
-    elif opt[0] == "ls" or opt[0] == "l":
-        ret = call("ls")
+    def do_ls(self, arg):
+        'List and print the current directory'
+        call("ls")
 
-    elif opt[0] == "play":
-        f = get_filename(' '.join(opt[1:]))
+    #playlist options
+    #TODO: can we group these better?
+    def do_add(self, arg):
+        'Adds a song to the playlist specified as the argument to this command'
+        f = get_filename(arg)
         if f:
-            print("\nPlaying ... %s\n" % f)
-            mci.play_song(os.path.join(os.getcwd(), f))
-
-    elif opt[0] == "exit":
-        mci.close_song()
-        sys.exit(0)
-
-    ## song operations
-    elif opt[0] == "song" or opt[0] == "s":
-        if not opt[1]:
-            return False
-
-        if opt[1] == "resume" or opt[1] == "r":
-            mci.resume_song()
-
-        elif opt[1] == "pause" or opt[1] == "p":
-            mci.pause_song()
-
-        elif opt[1] == "skip" or opt[1] == "k":
-            mci.close_song()
-            if not playlist.empty():
-                song = playlist.get()
-                print("\nPlaying ... %s\n" % song)
-                mci.play_song(song)
-
-        elif opt[1] == "stop" or opt[1] == "s":
-            mci.close_song()
-            playlist = qu.Queue()
-
-    #playlist operations
-    elif opt[0] == "playlist" or opt[0] == "p":
-        if not opt[1]:
-            return False
-
-        if opt[1] == "all" or opt[1] == "a":
-            for song in listdir:
-                f = get_filename(song)
-                if f:
-                    playlist.put(f)
-
-        elif opt[1] == "clear" or opt[1] == "c":
-            playlist = qu.Queue()
-
-        elif opt[1] == "show" or opt[1] == "s":
-            pprint.pprint(playlist.queue)
-
+            self.playlist.put(f)
         else:
-            f = get_filename(" ".join(opt[1:]))
+            print("Not a valid selection to add to the playlist")
+
+    def complete_add(self, text, line, begidx, endidx):
+        return self.complete_helper(text, line, begidx, endidx)
+
+    def do_addall(self, arg):
+        'Adds all songs in the current directory to the playlist, not recursively'
+        for song in self.list():
+            f = get_filename(song)
             if f:
-                playlist.put(f)
-            else:
-                print("Not a valid selection to playlist")
+                self.playlist.put(f)
 
-    ## debuging options
-    elif opt[0] == "try":
-        mci.try_song(" ".join(opt[1:]))
+    def do_clear(self, arg):
+        'Clears the entire playlist'
+        self.playlist = qu.Queue()
 
-    elif opt[0] == "seek":
-        try:
-            pos = int(opt[1])
-            mci.seek_song(pos)
-        except ValueError:
-            pass
+    def do_show(self, arg):
+        'Prints out the entire playlist'
+        self.pp.pprint(self.playlist.queue)
+
+    #song options
+    #TODO: logicall group together?
+    def do_play(self, arg):
+        'Play the song specified in the argument to this command'
+        f = get_filename(arg)
+        if f:
+            song = os.path.join(os.getcwd(), f)
+            #self.play(song)
+            self.playlist.put(song)
+            self.messages.put(self.types.PLAY)
+
+    def complete_play(self, text, line, begidx, endidx):
+        return self.complete_helper(text, line, begidx, endidx)
+
+    def do_resume(self, arg):
+        'Resume a paused song'
+        #self.mci.resume_song()
+        self.messages.put(self.types.RESUME)
+
+    def do_pause(self, arg):
+        'Pause a currently playing song'
+        #self.mci.pause_song()
+        self.messages.put(self.types.PAUSE)
+
+    def do_skip(self, arg):
+        'Stop the current song and play the next one in the playlist if it exists'
+        #By simply closing, our backround thread will start the next song if there is one
+        self.messages.put(self.types.CLOSE)
 
 
-def main():
-    kb = KBHit()
-    mci = MCI()
-    
-    pp = pprint.PrettyPrinter(indent=4)
-    environment = get_environment()
-    os.chdir(environment['music_home'])
+    def do_stop(self, arg):
+        'Stop playing the current song and clear playlist'
+        #self.mci.close_song()
+        self.messages.put(self.types.CLOSE)
+        self.playlist = qu.Queue()
 
-    while 1:
-        cmd = get_input("%s $ " % os.getcwd(), mci, kb)
-        opt = cmd.split(" ")
-        listdir = os.listdir(os.getcwd())
-        try:
-            process_input(opt, listdir, mci, pp)
-        except IndexError:
-            print("Invalid option")
+    #helper methods
+    def list(self):
+        return os.listdir(".")
 
-        try:
-            pass #TODO: handle keyboard interrupt better?
-        except KeyboardInterrupt:
-            sys.exit(0)
+    def cwd(self):
+        return os.getcwd()
 
+    def chdir(self, dir):
+        os.chdir(dir)
+        self.prompt = self.cwd() + '\n' + self.token
+
+    def complete_helper(self, text, line, begidx, endidx):
+        current_directory = self.list()
+        if text:
+            mline = line.partition(' ')[2]
+            offs = len(mline) - len(text)
+            mline = mline.encode("utf8")
+            return [
+                    s[offs:] for s in current_directory 
+                    if s.startswith(mline)
+                ]
+        else:
+            return current_directory
+
+    def player(self):
+        while self.running:
+            if not self.messages.empty():
+                cmd = self.messages.get()
+
+                if cmd == self.types.PLAY:
+                    if not self.playlist.empty():
+                        song = self.playlist.get()
+                        self.mci.play_song(song)
+
+                elif cmd == self.types.CLOSE:
+                    self.mci.close_song()
+
+                elif cmd == self.types.PAUSE:
+                    self.mci.pause_song()
+
+                elif cmd == self.types.RESUME:
+                    self.mci.resume_song()
+
+
+            err_length, buf_length = self.mci.length()
+            err_position, buf_position = self.mci.position()
+            try:
+                position = int(buf_position)
+                total_time = int(buf_length)
+                if position >= total_time:
+                    self.mci.close_song()
+                    #self.messages.put(self.types.CLOSE)
+                    if not self.playlist.empty():
+                        song = self.playlist.get()
+                        #print("\nPlaying ... %s\n" % song)
+                        self.mci.play_song(song)
+                        #self.messages.put(self.types.PLAY)
+            except ValueError:
+                if not self.playlist.empty():
+                    song = self.playlist.get()
+                    #print("\nPlaying ... %s\n" % song)
+                    self.mci.play_song(song)
+                    #self.messages.put(self.types.PLAY)
+
+            time.sleep(1)
 
 if __name__ == "__main__":
-    main()
+    PlayerShell().cmdloop()
