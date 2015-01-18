@@ -1,9 +1,11 @@
 cmd-player
 ==========
 
-A windows only, python based cli for navigating a music directory. Supports a variety of commands to seek/skip through songs, and features a  simple queuing system.
+A windows only (for now), python based cli for navigating a music directory. Supports a variety of commands to seek/skip through songs, and features a simple queuing system.
 
-Just type `python player.py` to start!
+Supports Python 3.4
+
+Just type `python music.py` to start!
 
 ###Dumb Python Player
  - `cd [dir]` to change directories

@@ -4,9 +4,8 @@ import sys
 import pprint
 import cmd
 import threading
-import Queue as qu
 
-from MCI import MCI
+from queue import Queue
 from subprocess import call
 from utils import get_filename
 from env import get_environment
@@ -17,6 +16,11 @@ try:
 except ImportError:
     import pyreadline as readline
 
+if os.name == "nt":
+    from winplayer import MusicPlayer
+else:
+    raise Exception("Not supported on this operation system at the moment")
+
 
 class Enum(set):
     def __getattr__(self, name):
@@ -25,21 +29,21 @@ class Enum(set):
         raise AttributeError
 
 class PlayerShell(cmd.Cmd):
-    intro = 'Dumb Python Player. Type "help" or "?"" to list commands.\n'
+    intro = 'Dumb Python Music Player. Type "help" or "?"" to list commands.\n'
     prompt = '> '
-    token = '> '
+    token = prompt
 
     def preloop(self):
-        self.mci = MCI()
-        self.playlist = qu.Queue()
+        self.player = MusicPlayer()
+        self.playlist = Queue()
         self.pp = pprint.PrettyPrinter(indent=4)
         self.running = True
         self.types = Enum(["PLAY", "PAUSE", "CLOSE", "RESUME"])
-        self.messages = qu.Queue()
+        self.messages = Queue()
         environment = get_environment()
         self.chdir(environment['music_home'])
 
-        consumer = threading.Thread(target=self.player)
+        consumer = threading.Thread(target=self.consumer_player)
         consumer.daemon = True
 
         consumer.start()
@@ -47,17 +51,16 @@ class PlayerShell(cmd.Cmd):
 
     def do_exit(self, arg):
         'Stop playing, and exit.'
-
         self.messages.put(self.types.CLOSE)
-
         self.running = False
         return True
 
     def do_cd(self, arg):
         'Change directory to the argument specified'
         #windows hack
-        if "My " in arg:
-            arg.replace("My ", "")
+        if os.name == "nt":
+            if "My " in arg:
+                arg.replace("My ", "")
         if os.path.isdir(arg):
             self.chdir(arg)
         else:
@@ -92,7 +95,7 @@ class PlayerShell(cmd.Cmd):
 
     def do_clear(self, arg):
         'Clears the entire playlist'
-        self.playlist = qu.Queue()
+        self.playlist = Queue()
 
     def do_show(self, arg):
         'Prints out the entire playlist'
@@ -105,7 +108,6 @@ class PlayerShell(cmd.Cmd):
         f = get_filename(arg)
         if f:
             song = os.path.join(os.getcwd(), f)
-            #self.play(song)
             self.playlist.put(song)
             self.messages.put(self.types.PLAY)
 
@@ -114,12 +116,10 @@ class PlayerShell(cmd.Cmd):
 
     def do_resume(self, arg):
         'Resume a paused song'
-        #self.mci.resume_song()
         self.messages.put(self.types.RESUME)
 
     def do_pause(self, arg):
         'Pause a currently playing song'
-        #self.mci.pause_song()
         self.messages.put(self.types.PAUSE)
 
     def do_skip(self, arg):
@@ -130,9 +130,8 @@ class PlayerShell(cmd.Cmd):
 
     def do_stop(self, arg):
         'Stop playing the current song and clear playlist'
-        #self.mci.close_song()
         self.messages.put(self.types.CLOSE)
-        self.playlist = qu.Queue()
+        self.playlist = Queue()
 
     #helper methods
     def list(self):
@@ -150,7 +149,7 @@ class PlayerShell(cmd.Cmd):
         if text:
             mline = line.partition(' ')[2]
             offs = len(mline) - len(text)
-            mline = mline.encode("utf8")
+            #mline = mline.encode("utf8")
             return [
                     s[offs:] for s in current_directory 
                     if s.startswith(mline)
@@ -158,7 +157,7 @@ class PlayerShell(cmd.Cmd):
         else:
             return current_directory
 
-    def player(self):
+    def consumer_player(self):
         while self.running:
             if not self.messages.empty():
                 cmd = self.messages.get()
@@ -166,36 +165,36 @@ class PlayerShell(cmd.Cmd):
                 if cmd == self.types.PLAY:
                     if not self.playlist.empty():
                         song = self.playlist.get()
-                        self.mci.play_song(song)
+                        self.player.play_song(song)
 
                 elif cmd == self.types.CLOSE:
-                    self.mci.close_song()
+                    self.player.close_song()
 
                 elif cmd == self.types.PAUSE:
-                    self.mci.pause_song()
+                    self.player.pause_song()
 
                 elif cmd == self.types.RESUME:
-                    self.mci.resume_song()
+                    self.player.resume_song()
 
 
-            err_length, buf_length = self.mci.length()
-            err_position, buf_position = self.mci.position()
+            err_length, buf_length = self.player.length()
+            err_position, buf_position = self.player.position()
             try:
                 position = int(buf_position)
                 total_time = int(buf_length)
                 if position >= total_time:
-                    self.mci.close_song()
+                    self.player.close_song()
                     #self.messages.put(self.types.CLOSE)
                     if not self.playlist.empty():
                         song = self.playlist.get()
                         #print("\nPlaying ... %s\n" % song)
-                        self.mci.play_song(song)
+                        self.player.play_song(song)
                         #self.messages.put(self.types.PLAY)
             except ValueError:
                 if not self.playlist.empty():
                     song = self.playlist.get()
                     #print("\nPlaying ... %s\n" % song)
-                    self.mci.play_song(song)
+                    self.player.play_song(song)
                     #self.messages.put(self.types.PLAY)
 
             time.sleep(1)
