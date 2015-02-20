@@ -7,8 +7,11 @@ import threading
 
 from queue import Queue
 from subprocess import call
-from utils import get_filename
-from env import get_environment
+
+from cmdplayer.utils import get_filename
+from cmdplayer.env import get_environment
+
+from mutagen.easyid3 import EasyID3
 
 #Windows doesn't have a readline package :(
 try:
@@ -17,7 +20,7 @@ except ImportError:
     import pyreadline as readline
 
 if os.name == "nt":
-    from winplayer import MusicPlayer
+    from cmdplayer.winplayer import MusicPlayer
 else:
     raise Exception("Not supported on this operation system at the moment")
 
@@ -42,6 +45,7 @@ class PlayerShell(cmd.Cmd):
         self.messages = Queue()
         environment = get_environment()
         self.chdir(environment['music_home'])
+        self.current = None
 
         consumer = threading.Thread(target=self.consumer_player)
         consumer.daemon = True
@@ -64,7 +68,7 @@ class PlayerShell(cmd.Cmd):
         if os.path.isdir(arg):
             self.chdir(arg)
         else:
-            print("%s is not a valid directory" % arg)
+            print("%s is not a valid directory." % arg)
 
     def complete_cd(self, text, line, begidx, endidx):
         return self.complete_helper(text, line, begidx, endidx)
@@ -81,7 +85,7 @@ class PlayerShell(cmd.Cmd):
         if f:
             self.playlist.put(f)
         else:
-            print("Not a valid selection to add to the playlist")
+            print("Not a valid selection to add to the playlist.")
 
     def complete_add(self, text, line, begidx, endidx):
         return self.complete_helper(text, line, begidx, endidx)
@@ -98,8 +102,18 @@ class PlayerShell(cmd.Cmd):
         self.playlist = Queue()
 
     def do_show(self, arg):
+        'Prints out the current song, if one is playing'
+        if self.current is not None:
+            audio = EasyID3(self.current)
+            print("%s - %s" % (audio['title'][0], audio['album'][0]))
+        else:
+            print("There is no song currently playing.")
+        
+    def do_showall(self, arg):
         'Prints out the entire playlist'
-        self.pp.pprint(self.playlist.queue)
+        for queued in self.playlist.queue:
+            audio = EasyID3(queued)
+            print("%s - %s" % (audio['title'][0], audio['album'][0]))
 
     #song options
     #TODO: logicall group together?
@@ -159,6 +173,7 @@ class PlayerShell(cmd.Cmd):
 
     def consumer_player(self):
         while self.running:
+            #interrupt to modify the current song somehow
             if not self.messages.empty():
                 cmd = self.messages.get()
 
@@ -166,38 +181,39 @@ class PlayerShell(cmd.Cmd):
                     if not self.playlist.empty():
                         song = self.playlist.get()
                         self.player.play_song(song)
-
+                        self.current = song
                 elif cmd == self.types.CLOSE:
                     self.player.close_song()
-
+                    self.current = None
                 elif cmd == self.types.PAUSE:
                     self.player.pause_song()
-
                 elif cmd == self.types.RESUME:
                     self.player.resume_song()
 
-
             err_length, buf_length = self.player.length()
             err_position, buf_position = self.player.position()
+            #we might be finished playing the current song
             try:
                 position = int(buf_position)
                 total_time = int(buf_length)
                 if position >= total_time:
                     self.player.close_song()
-                    #self.messages.put(self.types.CLOSE)
                     if not self.playlist.empty():
                         song = self.playlist.get()
-                        #print("\nPlaying ... %s\n" % song)
                         self.player.play_song(song)
-                        #self.messages.put(self.types.PLAY)
+                        self.current = song
             except ValueError:
                 if not self.playlist.empty():
                     song = self.playlist.get()
-                    #print("\nPlaying ... %s\n" % song)
                     self.player.play_song(song)
-                    #self.messages.put(self.types.PLAY)
+                    self.current = song
 
             time.sleep(1)
 
-if __name__ == "__main__":
+
+def main():
     PlayerShell().cmdloop()
+
+
+if __name__ == "__main__":
+    main()

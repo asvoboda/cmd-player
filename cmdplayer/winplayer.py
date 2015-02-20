@@ -1,7 +1,8 @@
 from ctypes import windll, c_buffer
 
+from cmdplayer.abstractplayer import AbstractMusicPlayer
 
-class _MCI():
+class _MCI(object):
     ##internals
     def __init__(self):
         self.wmci = windll.winmm.mciSendStringA
@@ -22,7 +23,7 @@ class _MCI():
         return buffer.value
 
 
-class MusicPlayer():
+class MusicPlayer(AbstractMusicPlayer):
     def __init__(self):
         self._mci = _MCI()
 

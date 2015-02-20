@@ -5,7 +5,7 @@ A windows only (for now), python based cli for navigating a music directory. Sup
 
 Supports Python 3.4
 
-Just type `python music.py` to start!
+Install with `python setup.py install` and then `python -m cmdplayer.music` to start!
 
 ###Dumb Python Player
  - `cd [dir]` to change directories
@@ -13,15 +13,16 @@ Just type `python music.py` to start!
  - `play [song]` to play the specified song
 
 ###Playlist Operations
- - `queue all` adds all songs in the current directory to your playlist
- - `queue show` prints the songs in your playlist
- - `queue clear` clears the playlist
- - `queue [song]` adds the specified song to your playlist
+ - `addall` adds all songs in the current directory to your playlist
+ - `showall` prints the songs in your playlist
+ - `clear` clears the playlist
+ - `add [song]` adds the specified song to your playlist
 
 ###Song Operations
- - `song pause` to pause the current song
- - `song resume` resumes a paused song
- - `song skip` to skip to the next song in the playlist
- - `song stop` stops execution and clears the playlist
+ - `pause` to pause the current song
+ - `resume` resumes a paused song
+ - `skip` to skip to the next song in the playlist
+ - `stop` stops execution and clears the playlist
+ - `show` displays information about the current playing song
 
  - `exit` to exit
