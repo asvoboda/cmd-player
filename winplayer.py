@@ -1,9 +1,9 @@
 from ctypes import windll, c_buffer
+from abstractplayer import AbstractMusicPlayer
 
-from cmdplayer.abstractplayer import AbstractMusicPlayer
 
 class _MCI(object):
-    ##internals
+    """Internals specific for a Windows machine"""
     def __init__(self):
         self.wmci = windll.winmm.mciSendStringA
         self.wmerror = windll.winmm.mciGetErrorStringA
@@ -27,7 +27,7 @@ class MusicPlayer(AbstractMusicPlayer):
     def __init__(self):
         self._mci = _MCI()
 
-    ##externals	
+    # externals
     def play_song(self, name):
         self._mci.direct_send("Close All")
         self._mci.direct_send("Open \"%s\" Type MPEGVideo Alias mus" % name)

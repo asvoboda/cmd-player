@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 
+
 class AbstractMusicPlayer(object):
+    """Abstract class that defines the API for a Music Player"""
     __metaclass__ = ABCMeta
     
     @abstractmethod

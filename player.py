@@ -1,26 +1,26 @@
 import os
 import time
-import sys
 import pprint
 import cmd
 import threading
-
+from sys import exit
 from queue import Queue
 from subprocess import call
 
-from cmdplayer.utils import get_filename
-from cmdplayer.env import get_environment
-
+from env import get_environment
 from mutagen.easyid3 import EasyID3
 
-#Windows doesn't have a readline package :(
+from utils import get_filename
+
+
+"""Windows doesn't have a readline package :("""
 try:
     import readline
 except ImportError:
     import pyreadline as readline
 
 if os.name == "nt":
-    from cmdplayer.winplayer import MusicPlayer
+    from winplayer import MusicPlayer
 else:
     raise Exception("Not supported on this operation system at the moment")
 
@@ -31,37 +31,38 @@ class Enum(set):
             return name
         raise AttributeError
 
+
 class PlayerShell(cmd.Cmd):
     intro = 'Dumb Python Music Player. Type "help" or "?"" to list commands.\n'
     prompt = '> '
     token = prompt
 
-    def preloop(self):
-        self.player = MusicPlayer()
-        self.playlist = Queue()
-        self.pp = pprint.PrettyPrinter(indent=4)
-        self.running = True
-        self.types = Enum(["PLAY", "PAUSE", "CLOSE", "RESUME"])
-        self.messages = Queue()
-        environment = get_environment()
-        self.chdir(environment['music_home'])
-        self.current = None
+    # Internals
+    player = MusicPlayer()
+    playlist = Queue()
+    pp = pprint.PrettyPrinter(indent=4)
+    running = True
+    types = Enum(["PLAY", "PAUSE", "CLOSE", "RESUME"])
+    messages = Queue()
+    environment = get_environment()
+    current = None
 
+    def preloop(self):
+        self.chdir(self.environment['music_home'])
         consumer = threading.Thread(target=self.consumer_player)
         consumer.daemon = True
-
         consumer.start()
 
-
     def do_exit(self, arg):
-        'Stop playing, and exit.'
+        """Stop playing, and exit."""
         self.messages.put(self.types.CLOSE)
         self.running = False
         return True
 
     def do_cd(self, arg):
-        'Change directory to the argument specified'
-        #windows hack
+        """Change directory to the argument specified"""
+
+        # windows hack
         if os.name == "nt":
             if "My " in arg:
                 arg.replace("My ", "")
@@ -74,13 +75,13 @@ class PlayerShell(cmd.Cmd):
         return self.complete_helper(text, line, begidx, endidx)
 
     def do_ls(self, arg):
-        'List and print the current directory'
+        """List and print the current directory"""
         call("ls")
 
-    #playlist options
-    #TODO: can we group these better?
+    # playlist options
+    # TODO: can we group these better?
     def do_add(self, arg):
-        'Adds a song to the playlist specified as the argument to this command'
+        """Adds a song to the playlist specified as the argument to this command"""
         f = get_filename(arg)
         if f:
             self.playlist.put(f)
@@ -91,18 +92,18 @@ class PlayerShell(cmd.Cmd):
         return self.complete_helper(text, line, begidx, endidx)
 
     def do_addall(self, arg):
-        'Adds all songs in the current directory to the playlist, not recursively'
+        """Adds all songs in the current directory to the playlist, not recursively"""
         for song in self.list():
             f = get_filename(song)
             if f:
                 self.playlist.put(f)
 
     def do_clear(self, arg):
-        'Clears the entire playlist'
+        """Clears the entire playlist"""
         self.playlist = Queue()
 
     def do_show(self, arg):
-        'Prints out the current song, if one is playing'
+        """Prints out the current song, if one is playing"""
         if self.current is not None:
             audio = EasyID3(self.current)
             print("%s - %s" % (audio['title'][0], audio['album'][0]))
@@ -110,15 +111,15 @@ class PlayerShell(cmd.Cmd):
             print("There is no song currently playing.")
         
     def do_showall(self, arg):
-        'Prints out the entire playlist'
+        """Prints out the entire playlist"""
         for queued in self.playlist.queue:
             audio = EasyID3(queued)
             print("%s - %s" % (audio['title'][0], audio['album'][0]))
 
-    #song options
-    #TODO: logicall group together?
+    # song options
+    # TODO: logicall group together?
     def do_play(self, arg):
-        'Play the song specified in the argument to this command'
+        """Play the song specified in the argument to this command"""
         f = get_filename(arg)
         if f:
             song = os.path.join(os.getcwd(), f)
@@ -129,25 +130,25 @@ class PlayerShell(cmd.Cmd):
         return self.complete_helper(text, line, begidx, endidx)
 
     def do_resume(self, arg):
-        'Resume a paused song'
+        """Resume a paused song"""
         self.messages.put(self.types.RESUME)
 
     def do_pause(self, arg):
-        'Pause a currently playing song'
+        """Pause a currently playing song"""
         self.messages.put(self.types.PAUSE)
 
     def do_skip(self, arg):
-        'Stop the current song and play the next one in the playlist if it exists'
-        #By simply closing, our backround thread will start the next song if there is one
+        """Stop the current song and play the next one in the playlist if it exists"""
+        # By simply closing, our background thread will start the next song if there is one
         self.messages.put(self.types.CLOSE)
 
 
     def do_stop(self, arg):
-        'Stop playing the current song and clear playlist'
+        """Stop playing the current song and clear playlist"""
         self.messages.put(self.types.CLOSE)
         self.playlist = Queue()
 
-    #helper methods
+    # helper methods
     def list(self):
         return os.listdir(".")
 
@@ -163,7 +164,7 @@ class PlayerShell(cmd.Cmd):
         if text:
             mline = line.partition(' ')[2]
             offs = len(mline) - len(text)
-            #mline = mline.encode("utf8")
+            # mline = mline.encode("utf8")
             return [
                     s[offs:] for s in current_directory 
                     if s.startswith(mline)
@@ -173,26 +174,26 @@ class PlayerShell(cmd.Cmd):
 
     def consumer_player(self):
         while self.running:
-            #interrupt to modify the current song somehow
+            # interrupt to modify the current song somehow
             if not self.messages.empty():
-                cmd = self.messages.get()
+                _cmd = self.messages.get()
 
-                if cmd == self.types.PLAY:
+                if _cmd == self.types.PLAY:
                     if not self.playlist.empty():
                         song = self.playlist.get()
                         self.player.play_song(song)
                         self.current = song
-                elif cmd == self.types.CLOSE:
+                elif _cmd == self.types.CLOSE:
                     self.player.close_song()
                     self.current = None
-                elif cmd == self.types.PAUSE:
+                elif _cmd == self.types.PAUSE:
                     self.player.pause_song()
-                elif cmd == self.types.RESUME:
+                elif _cmd == self.types.RESUME:
                     self.player.resume_song()
 
             err_length, buf_length = self.player.length()
             err_position, buf_position = self.player.position()
-            #we might be finished playing the current song
+            # we might be finished playing the current song
             try:
                 position = int(buf_position)
                 total_time = int(buf_length)
@@ -216,4 +217,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

@@ -5,7 +5,7 @@ A windows only (for now), python based cli for navigating a music directory. Sup
 
 Supports Python 3.4
 
-Install with `python setup.py install` and then `python -m cmdplayer.music` to start!
+Install with `python setup.py install` and then `python -m player` to start!
 
 ###Dumb Python Player
  - `cd [dir]` to change directories
