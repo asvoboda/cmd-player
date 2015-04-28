@@ -46,6 +46,7 @@ class PlayerShell(cmd.Cmd):
     messages = Queue()
     environment = get_environment()
     current = None
+    repeat = False
 
     def preloop(self):
         self.chdir(self.environment['music_home'])
@@ -59,10 +60,16 @@ class PlayerShell(cmd.Cmd):
         self.running = False
         return True
 
+    def do_repeat(self, arg):
+        """Toggles playlist repeating"""
+        self.repeat = not self.repeat
+        val = "on" if self.repeat else "off"
+        print("Repeat is now %s" % val)
+
     def do_cd(self, arg):
         """Change directory to the argument specified"""
 
-        # windows hack
+        # shitty windows hack for "My" in the directory
         if os.name == "nt":
             if "My " in arg:
                 arg.replace("My ", "")
@@ -117,17 +124,7 @@ class PlayerShell(cmd.Cmd):
             print("%s - %s" % (audio['title'][0], audio['album'][0]))
 
     # song options
-    # TODO: logicall group together?
-    def do_play(self, arg):
-        """Play the song specified in the argument to this command"""
-        f = get_filename(arg)
-        if f:
-            song = os.path.join(os.getcwd(), f)
-            self.playlist.put(song)
-            self.messages.put(self.types.PLAY)
-
-    def complete_play(self, text, line, begidx, endidx):
-        return self.complete_helper(text, line, begidx, endidx)
+    # TODO: Is there a logical grouping of functionality here? And if so, how do we do that in the cmd module?
 
     def do_resume(self, arg):
         """Resume a paused song"""
@@ -141,7 +138,6 @@ class PlayerShell(cmd.Cmd):
         """Stop the current song and play the next one in the playlist if it exists"""
         # By simply closing, our background thread will start the next song if there is one
         self.messages.put(self.types.CLOSE)
-
 
     def do_stop(self, arg):
         """Stop playing the current song and clear playlist"""
@@ -172,6 +168,14 @@ class PlayerShell(cmd.Cmd):
         else:
             return current_directory
 
+    def _get_next(self):
+        finished_song = self.current
+        song = self.playlist.get()
+        self.player.play_song(song)
+        self.current = song
+        if self.repeat and finished_song is not None:
+            self.playlist.put(finished_song)
+
     def consumer_player(self):
         while self.running:
             # interrupt to modify the current song somehow
@@ -180,12 +184,11 @@ class PlayerShell(cmd.Cmd):
 
                 if _cmd == self.types.PLAY:
                     if not self.playlist.empty():
-                        song = self.playlist.get()
-                        self.player.play_song(song)
-                        self.current = song
+                        self._get_next()
                 elif _cmd == self.types.CLOSE:
                     self.player.close_song()
-                    self.current = None
+                    if not self.repeat:
+                        self.current = None
                 elif _cmd == self.types.PAUSE:
                     self.player.pause_song()
                 elif _cmd == self.types.RESUME:
@@ -200,14 +203,10 @@ class PlayerShell(cmd.Cmd):
                 if position >= total_time:
                     self.player.close_song()
                     if not self.playlist.empty():
-                        song = self.playlist.get()
-                        self.player.play_song(song)
-                        self.current = song
+                        self._get_next()
             except ValueError:
                 if not self.playlist.empty():
-                    song = self.playlist.get()
-                    self.player.play_song(song)
-                    self.current = song
+                    self._get_next()
 
             time.sleep(1)
 

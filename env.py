@@ -4,6 +4,7 @@ import json
 env_file = "env.json"
 info = {"music_home": ""}
 
+
 def save(file, environment):
     f = open(file, 'w')
     f.write(json.dumps(environment))

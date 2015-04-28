@@ -1,10 +1,11 @@
 import os
 
+
 def get_filename(f):
     name = None
-    exts = ("mp3", "wav", "m4a", "MP3", "WAV", "M4A")
+    extensions = ("mp3", "wav", "m4a", "MP3", "WAV", "M4A")
     if os.path.isfile(f):
-        if f.endswith(exts):
+        if f.endswith(extensions):
             name = os.path.join(os.getcwd(), f)
         else:
             print("Not a valid media type")

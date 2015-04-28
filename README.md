@@ -7,6 +7,8 @@ Supports Python 3.4
 
 Install with `python setup.py install` and then `python -m player` to start!
 
+You will be prompted to give cmdplayer the location of the topmost music directory. This can be changed on startup, if necessary.
+
 ###Dumb Python Player
  - `cd [dir]` to change directories
  - `ls` to list directories
@@ -17,6 +19,7 @@ Install with `python setup.py install` and then `python -m player` to start!
  - `showall` prints the songs in your playlist
  - `clear` clears the playlist
  - `add [song]` adds the specified song to your playlist
+ - `repeat` toggles re-adding any song that finishes playing to the end of the playlist
 
 ###Song Operations
  - `pause` to pause the current song
